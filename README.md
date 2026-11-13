@@ -32,7 +32,9 @@ The game files are changed in place. Before anything is changed, the originals a
 
 ### Switching languages in-game
 
-Press **F9** while playing to cycle the text between both languages, the primary language only, and the secondary language only. A short notice shows the current mode, and the choice is remembered. Dialogue lines on screen switch right away, and so does all new text. Other text already on screen (menus, side messages) changes when it is shown again, for example after reopening a menu.
+Press **F9** while playing to cycle the text between both languages, the primary language only, and the secondary language only. A short notice shows the current mode, and the choice is remembered.
+
+The switch is immediate: the line a character is saying, choices, side messages, notice boards and item names in open menus are redrawn in the new language, and their boxes resize to fit. A line that is still being typed out starts again in the new language. Menu labels (like "Inventar") come from the game's own language files and always stay in the primary language.
 
 This works by loading a small script, `assets/bilingual-toggle.js`, from the game's start page. `--restore` removes it.
 
