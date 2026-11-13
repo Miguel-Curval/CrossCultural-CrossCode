@@ -51,6 +51,17 @@ GAME_GREY = (0x80, 0x80, 0x80)
 DEFAULT_GREY_SHADE = "8C8C8C"
 HEX_COLOR_RE = re.compile(r"^#?[0-9A-Fa-f]{6}$")
 
+# In-game language switch: a script loaded after the game's own code.
+TOGGLE_TEMPLATE = Path(__file__).resolve().with_name("bilingual-toggle.js")
+TOGGLE_SCRIPT = Path("assets/bilingual-toggle.js")
+GAME_PAGE = Path("assets/node-webkit.html")
+GAME_SCRIPT_TAG = '<script type="text/javascript" src="js/game.compiled.js"></script>'
+TOGGLE_SCRIPT_TAG = '<script type="text/javascript" src="bilingual-toggle.js" charset="utf-8"></script>'
+# Each merged label keeps its original primary text here for the switch.
+ORIGINAL_KEY = "bilingualOriginal"
+# F7, F8, F10 and F11 are used by the game.
+TOGGLE_KEYS = {f"F{n}": 111 + n for n in (1, 2, 3, 4, 5, 6, 9, 12)}
+
 LANG_CODE_RE = re.compile(r"^[a-z]{2}_[A-Z]{2}$")
 COLOR_CODE_RE = re.compile(r"\\c\[(\d+)\]")
 BLANK_LINE_RE = re.compile(r"\n[ \t]*\n")
@@ -129,13 +140,17 @@ def combine(primary, secondary, separator, secondary_first, secondary_color=None
 
 
 def merge_labels(data, primary, secondary, separator, short_separator, secondary_first,
-                 secondary_color=None, paragraph_separator=None):
+                 secondary_color=None, paragraph_separator=None, original_key=None):
     """Merge `secondary` into `primary` in every lang label inside `data`.
 
     `paragraph_separator` replaces `separator` for text that already has
     blank lines, so the second language reads as its own block.
 
     `secondary_color` is a font color number for the secondary language.
+
+    With `original_key`, every label that differs between the languages also
+    keeps its original primary text under that key, for the in-game switch.
+    Labels left unmerged because they are only codes (\\v[...]) get it too.
 
     Modifies `data` in place and returns the number of labels changed.
     """
@@ -147,8 +162,12 @@ def merge_labels(data, primary, secondary, separator, short_separator, secondary
         if isinstance(node, dict):
             primary_text = label_text(node, primary)
             secondary_text = label_text(node, secondary)
-            if (primary_text and secondary_text and primary_text != secondary_text
-                    and has_words(primary_text) and has_words(secondary_text)):
+            differs = primary_text and secondary_text and primary_text != secondary_text
+            if differs and original_key:
+                node[original_key] = node[primary]
+            if differs and not (has_words(primary_text) and has_words(secondary_text)):
+                changed += bool(original_key)
+            elif differs:
                 if key in SHORT_KEYS:
                     sep = short_separator
                 elif paragraph_separator and (BLANK_LINE_RE.search(primary_text)
@@ -378,6 +397,8 @@ class Backup:
         return backup
 
     def restore(self):
+        for rel in self.state.get("created", []):
+            (self.install_dir / rel).unlink(missing_ok=True)
         files = [p for p in self.dir.rglob("*") if p.is_file() and p != self.state_path]
         for backup in files:
             atomic_copy(backup, self.install_dir / backup.relative_to(self.dir))
@@ -428,6 +449,9 @@ Examples:
     parser.add_argument("--grey-shade", default=DEFAULT_GREY_SHADE, metavar="HEX",
                         help=f"Shade of the grey font, e.g. 8C8C8C (default: {DEFAULT_GREY_SHADE}; the "
                              "game's own is 808080). Also brightens the few game texts that use grey.")
+    parser.add_argument("--toggle-key", choices=[*TOGGLE_KEYS, "none"], default="F9",
+                        help="Key that switches the text in-game between both languages, the primary "
+                             "and the secondary one (default: F9; none disables it)")
     parser.add_argument("--maps-only", action="store_true",
                         help="Only process map files (the original behaviour); skips the common "
                              "events in database.json, items, enemies, DLC, etc.")
@@ -459,6 +483,34 @@ Examples:
     args.paragraph_separator = unescape(args.paragraph_separator)
     args.short_separator = unescape(args.short_separator)
     return args
+
+
+def toggle_script(primary, secondary, key_name):
+    """The in-game switch script with this run's settings filled in."""
+    template = TOGGLE_TEMPLATE.read_text("utf-8")
+    config = json.dumps({"primary": primary, "secondary": secondary, "originalKey": ORIGINAL_KEY,
+                         "keyCode": TOGGLE_KEYS[key_name], "keyName": key_name})
+    start, end = template.index("/*CONFIG*/") + len("/*CONFIG*/"), template.index("/*END*/")
+    return (template[:start] + config + template[end:]).encode("utf-8")
+
+
+def install_toggle(args, install_dir, backup, in_place, enabled):
+    """Write or remove the switch script. It is a new file, so it has no backup."""
+    rel = TOGGLE_SCRIPT.as_posix()
+    if not in_place:
+        if enabled:
+            atomic_write(args.output_dir / TOGGLE_SCRIPT,
+                         toggle_script(args.lang_primary, args.lang_secondary, args.toggle_key))
+        return
+    created = backup.state.setdefault("created", [])
+    if enabled:
+        atomic_write(install_dir / TOGGLE_SCRIPT,
+                     toggle_script(args.lang_primary, args.lang_secondary, args.toggle_key))
+        if rel not in created:
+            created.append(rel)
+    elif rel in created:
+        (install_dir / TOGGLE_SCRIPT).unlink(missing_ok=True)
+        created.remove(rel)
 
 
 def pristine_source(install_dir, backup, rel):
@@ -534,9 +586,21 @@ def main(argv=None):
         data = load_json(source)
         count = merge_labels(data, args.lang_primary, args.lang_secondary,
                              args.separator, args.short_separator, args.secondary_first,
-                             FONT_COLORS[args.secondary_color], args.paragraph_separator)
+                             FONT_COLORS[args.secondary_color], args.paragraph_separator,
+                             ORIGINAL_KEY if toggle else None)
         labels_changed += count
         return dump_json(data) if count else None
+
+    toggle = args.toggle_key != "none"
+
+    def add_toggle_tag(source):
+        if not toggle:
+            return None
+        page = source.read_bytes().decode("utf-8")  # bytes keep the file's line endings
+        if GAME_SCRIPT_TAG not in page:
+            raise ValueError("could not find where to add the language switch script")
+        newline = "\r\n" if "\r\n" in page else "\n"
+        return page.replace(GAME_SCRIPT_TAG, GAME_SCRIPT_TAG + newline + TOGGLE_SCRIPT_TAG, 1).encode("utf-8")
 
     shade = parse_hex_color(args.grey_shade)
     recolor_fonts = args.secondary_color == "grey" and shade != GAME_GREY
@@ -559,6 +623,13 @@ def main(argv=None):
             files_changed += update(rel, recolor_font)
         except (OSError, ValueError, zlib.error) as e:
             errors.append((rel, e))
+
+    try:
+        install_toggle(args, install_dir, backup, in_place, toggle)
+        if (install_dir / GAME_PAGE).exists():
+            update(GAME_PAGE, add_toggle_tag)
+    except (OSError, ValueError) as e:
+        errors.append((GAME_PAGE, e))
 
     if in_place:
         backup.state["in_progress"] = False

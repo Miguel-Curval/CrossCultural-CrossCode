@@ -30,6 +30,12 @@ The game files are changed in place. Before anything is changed, the originals a
 *   **Undo everything** with `--restore`.
 *   **Update the game** safely: changed game files are noticed and the backup is refreshed. Re-run the script after an update.
 
+### Switching languages in-game
+
+Press **F9** while playing to cycle the text between both languages, the primary language only, and the secondary language only. A short notice shows the current mode, and the choice is remembered. Dialogue lines on screen switch right away, and so does all new text. Other text already on screen (menus, side messages) changes when it is shown again, for example after reopening a menu.
+
+This works by loading a small script, `assets/bilingual-toggle.js`, from the game's start page. `--restore` removes it.
+
 Language codes in the game: `en_US`, `de_DE`, `ja_JP`, `ko_KR`, `zh_CN`, `zh_TW`. (`fr_FR` exists only for some texts.)
 
 ### Options
@@ -42,6 +48,7 @@ Language codes in the game: `en_US`, `de_DE`, `ja_JP`, `ko_KR`, `zh_CN`, `zh_TW`
 *   **`--grey-shade`**: Shade of the grey, as a hex color. Default: `8C8C8C`, slightly brighter than the game's own `808080`. This recolors the game's grey font images, so the few game texts that use grey get the same shade.
 *   **`--separator`**: Separator for dialogue and longer text. Default: a new line, or a blank line for text with paragraphs (`~ ` is added with `--secondary-color none`). A custom separator is used everywhere as given.
 *   **`--short-separator`**: Separator for choices, names, places and titles. Default: a space (` ~ ` with `--secondary-color none`). (`--choice-separator` still works.)
+*   **`--toggle-key`**: Key for the in-game switch: `F1` to `F6`, `F9` (default) or `F12`; `none` turns the switch off.
 *   **`--maps-only`**: Only change map files, like older versions of this script.
 *   **`--output-dir`**: Do not touch the game. Write the changed files to this folder instead, using the same folder layout as the install folder (`assets/data/...`).
 *   **`--restore`**: Put the original files back and delete the backup.
@@ -72,3 +79,5 @@ Run the tests (no game install needed):
 ```bash
 python -m unittest
 ```
+
+The in-game switch is tested too when Node.js is installed.

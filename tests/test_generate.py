@@ -153,6 +153,8 @@ class InstallTests(unittest.TestCase):
         for path, data in ((self.map, MAP), (self.db, DATABASE), (self.lang, MAP), (self.copy, MAP)):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(MAP if data is MAP else data, separators=(",", ":")), "utf-8")
+        self.page = self.install / bl.GAME_PAGE
+        self.page.write_text("<head>\n" + bl.GAME_SCRIPT_TAG + "\n</head>", "utf-8")
         self.font = self.install / bl.GREY_FONT_IMAGES[0]
         self.font.parent.mkdir(parents=True)
         self.font.write_bytes(FONT)
@@ -245,6 +247,39 @@ class InstallTests(unittest.TestCase):
                       "en_US", "--grey-shade", "grey")
         self.assertEqual(code, 2)
 
+    def test_language_switch_is_installed_and_removed(self):
+        script = self.install / bl.TOGGLE_SCRIPT
+        run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US")
+        self.assertIn(bl.TOGGLE_SCRIPT_TAG, self.page.read_text("utf-8"))
+        self.assertIn('"keyCode": 120', script.read_text("utf-8"))
+        data = json.loads(self.map.read_text("utf-8"))
+        message = data["entities"][0]["settings"]["event"][0]["message"]
+        self.assertEqual(message[bl.ORIGINAL_KEY], "Hallo.<<C<<Geprüft: X")
+
+        run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US",
+            "--toggle-key", "F6")
+        self.assertIn('"keyName": "F6"', script.read_text("utf-8"))
+        self.assertEqual(self.page.read_text("utf-8").count(bl.TOGGLE_SCRIPT_TAG), 1)
+
+        run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US",
+            "--toggle-key", "none")
+        self.assertFalse(script.exists())
+        self.assertEqual(self.page.read_bytes(), self.originals["assets/node-webkit.html"])
+        data = json.loads(self.map.read_text("utf-8"))
+        self.assertNotIn(bl.ORIGINAL_KEY, data["entities"][0]["settings"]["event"][0]["message"])
+
+        run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US")
+        run("--install-dir", self.install, "--restore")
+        self.assertFalse(script.exists())
+        self.assertEqual(self.snapshot(), self.originals)
+
+    def test_code_only_labels_keep_original_for_switch(self):
+        data = {"object": {"en_US": "\\v[item.225.name]", "de_DE": "Blaue Eisform"}}
+        self.assertEqual(bl.merge_labels(data, "de_DE", "en_US", "\n", " ", False, 4, None,
+                                         bl.ORIGINAL_KEY), 1)
+        self.assertEqual(data["object"]["de_DE"], "Blaue Eisform")
+        self.assertEqual(data["object"][bl.ORIGINAL_KEY], "Blaue Eisform")
+
     def test_output_dir_leaves_install_untouched(self):
         out_dir = self.tmp / "out" / "nested"
         code, out = run("--install-dir", self.install, "--lang-primary", "de_DE",
@@ -259,6 +294,18 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(code, 2)
         code, out = run("--install-dir", self.tmp, "--lang-primary", "de_DE", "--lang-secondary", "en_US")
         self.assertIn("no CrossCode installation", str(code) + out)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ToggleScriptTests(unittest.TestCase):
+    def test_toggle_script_in_node(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "bilingual-toggle.js"
+            script.write_bytes(bl.toggle_script("de_DE", "en_US", "F9"))
+            result = subprocess.run(["node", str(Path(__file__).with_name("toggle.test.js")), str(script)],
+                                    capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
 
 
 if __name__ == "__main__":
