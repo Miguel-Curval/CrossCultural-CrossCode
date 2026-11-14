@@ -36,6 +36,8 @@ Press **F9** while playing to cycle the text between both languages, the primary
 
 The switch is immediate: the line a character is saying, choices, side messages, notice boards and item names in open menus are redrawn in the new language, and their boxes resize to fit. A line that is still being typed out starts again in the new language. Menu labels (like "Inventar") come from the game's own language files and always stay in the primary language.
 
+To never see both languages at once, install with `--no-double`. F9 then only switches between the primary and the secondary language, and the game starts in the primary one.
+
 This works by loading a small script, `assets/bilingual-toggle.js`, from the game's start page. `--restore` removes it.
 
 Language codes in the game: `en_US`, `de_DE`, `ja_JP`, `ko_KR`, `zh_CN`, `zh_TW`. (`fr_FR` exists only for some texts.)
@@ -51,6 +53,7 @@ Language codes in the game: `en_US`, `de_DE`, `ja_JP`, `ko_KR`, `zh_CN`, `zh_TW`
 *   **`--separator`**: Separator for dialogue and longer text. Default: a new line, or a blank line for text with paragraphs (`~ ` is added with `--secondary-color none`). A custom separator is used everywhere as given.
 *   **`--short-separator`**: Separator for choices, names, places and titles. Default: a space (` ~ ` with `--secondary-color none`). (`--choice-separator` still works.)
 *   **`--toggle-key`**: Key for the in-game switch: `F1` to `F6`, `F9` (default) or `F12`; `none` turns the switch off.
+*   **`--no-double`**: Show one language at a time. F9 switches between the primary and the secondary language, without the mode that shows both.
 *   **`--maps-only`**: Only change map files, like older versions of this script.
 *   **`--output-dir`**: Do not touch the game. Write the changed files to this folder instead, using the same folder layout as the install folder (`assets/data/...`).
 *   **`--restore`**: Put the original files back and delete the backup.

@@ -262,6 +262,10 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(self.page.read_text("utf-8").count(bl.TOGGLE_SCRIPT_TAG), 1)
 
         run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US",
+            "--no-double")
+        self.assertIn('"double": false', script.read_text("utf-8"))
+
+        run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US",
             "--toggle-key", "none")
         self.assertFalse(script.exists())
         self.assertEqual(self.page.read_bytes(), self.originals["assets/node-webkit.html"])
@@ -294,18 +298,27 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(code, 2)
         code, out = run("--install-dir", self.tmp, "--lang-primary", "de_DE", "--lang-secondary", "en_US")
         self.assertIn("no CrossCode installation", str(code) + out)
+        code, out = run("--install-dir", self.install, "--lang-primary", "de_DE", "--lang-secondary", "en_US",
+                        "--no-double", "--toggle-key", "none")
+        self.assertEqual(code, 2)
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
 class ToggleScriptTests(unittest.TestCase):
-    def test_toggle_script_in_node(self):
+    def run_node(self, test, double):
         import subprocess
         with tempfile.TemporaryDirectory() as tmp:
             script = Path(tmp) / "bilingual-toggle.js"
-            script.write_bytes(bl.toggle_script("de_DE", "en_US", "F9"))
-            result = subprocess.run(["node", str(Path(__file__).with_name("toggle.test.js")), str(script)],
+            script.write_bytes(bl.toggle_script("de_DE", "en_US", "F9", double))
+            result = subprocess.run(["node", str(Path(__file__).with_name(test)), str(script)],
                                     capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_toggle_script_in_node(self):
+        self.run_node("toggle.test.js", True)
+
+    def test_toggle_script_without_double_display(self):
+        self.run_node("toggle-single.test.js", False)
 
 
 if __name__ == "__main__":

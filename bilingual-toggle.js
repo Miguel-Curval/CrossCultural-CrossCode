@@ -5,17 +5,21 @@
 (function () {
   "use strict";
 
-  var CONFIG = /*CONFIG*/{"primary": "de_DE", "secondary": "en_US", "originalKey": "bilingualOriginal", "keyCode": 120, "keyName": "F9"}/*END*/;
+  var CONFIG = /*CONFIG*/{"primary": "de_DE", "secondary": "en_US", "originalKey": "bilingualOriginal", "keyCode": 120, "keyName": "F9", "double": true}/*END*/;
   var STORAGE_KEY = "crossCulturalMode";
   var LANGUAGE_NAMES = {
     en_US: "English", de_DE: "Deutsch", fr_FR: "Français", ja_JP: "日本語",
     ko_KR: "한국어", zh_CN: "简体中文", zh_TW: "繁體中文"
   };
 
-  var mode = 0; // 0 = both, 1 = primary only, 2 = secondary only
+  // 0 = both, 1 = primary only, 2 = secondary only. Without the double
+  // display, only 1 and 2 are used, starting with the primary language.
+  var FIRST_MODE = CONFIG.double === false ? 1 : 0;
+  var mode = FIRST_MODE;
   try {
     mode = (parseInt(window.localStorage.getItem(STORAGE_KEY), 10) || 0) % 3;
-  } catch (e) { /* storage unavailable: start with both */ }
+  } catch (e) { /* storage unavailable: start with the first mode */ }
+  if (mode < FIRST_MODE) mode = FIRST_MODE;
 
   function name(lang) { return LANGUAGE_NAMES[lang] || lang; }
 
@@ -333,7 +337,7 @@
       return;
     }
     var before = mode;
-    mode = (mode + 1) % 3;
+    mode = mode + 1 > 2 ? FIRST_MODE : mode + 1;
     try { window.localStorage.setItem(STORAGE_KEY, String(mode)); } catch (e) { /* not saved */ }
     if (gameGetText) {
       try { redrawScreen(before); } catch (e) { /* new text still follows the switch */ }

@@ -452,6 +452,9 @@ Examples:
     parser.add_argument("--toggle-key", choices=[*TOGGLE_KEYS, "none"], default="F9",
                         help="Key that switches the text in-game between both languages, the primary "
                              "and the secondary one (default: F9; none disables it)")
+    parser.add_argument("--no-double", action="store_true",
+                        help="Never show both languages at once: the switch key only toggles between "
+                             "the primary and the secondary language, starting with the primary one")
     parser.add_argument("--maps-only", action="store_true",
                         help="Only process map files (the original behaviour); skips the common "
                              "events in database.json, items, enemies, DLC, etc.")
@@ -468,6 +471,8 @@ Examples:
                 parser.error(f"invalid language code {value!r} (expected something like de_DE)")
         if args.lang_primary == args.lang_secondary:
             parser.error("--lang-primary and --lang-secondary must be different")
+        if args.no_double and args.toggle_key == "none":
+            parser.error("--no-double needs the in-game switch; it cannot be used with --toggle-key none")
     # The color tells the languages apart; a visible marker is only needed without it.
     colored = FONT_COLORS[args.secondary_color] is not None
     if args.separator is None:
@@ -485,11 +490,11 @@ Examples:
     return args
 
 
-def toggle_script(primary, secondary, key_name):
+def toggle_script(primary, secondary, key_name, double=True):
     """The in-game switch script with this run's settings filled in."""
     template = TOGGLE_TEMPLATE.read_text("utf-8")
     config = json.dumps({"primary": primary, "secondary": secondary, "originalKey": ORIGINAL_KEY,
-                         "keyCode": TOGGLE_KEYS[key_name], "keyName": key_name})
+                         "keyCode": TOGGLE_KEYS[key_name], "keyName": key_name, "double": double})
     start, end = template.index("/*CONFIG*/") + len("/*CONFIG*/"), template.index("/*END*/")
     return (template[:start] + config + template[end:]).encode("utf-8")
 
@@ -500,12 +505,14 @@ def install_toggle(args, install_dir, backup, in_place, enabled):
     if not in_place:
         if enabled:
             atomic_write(args.output_dir / TOGGLE_SCRIPT,
-                         toggle_script(args.lang_primary, args.lang_secondary, args.toggle_key))
+                         toggle_script(args.lang_primary, args.lang_secondary, args.toggle_key,
+                                       not args.no_double))
         return
     created = backup.state.setdefault("created", [])
     if enabled:
         atomic_write(install_dir / TOGGLE_SCRIPT,
-                     toggle_script(args.lang_primary, args.lang_secondary, args.toggle_key))
+                     toggle_script(args.lang_primary, args.lang_secondary, args.toggle_key,
+                                       not args.no_double))
         if rel not in created:
             created.append(rel)
     elif rel in created:
